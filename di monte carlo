@@ -1,0 +1,56 @@
+import requests
+import numpy as np
+import pandas as pd
+
+def monte_carlo_from_upstox(symbol, interval, start, end, sims=1000, horizon=200):
+    BASE = "https://api.upstox.com/v2/historical-candle"
+    headers = {
+        "Accept": "application/json",
+        "Authorization": (f"Bearer "
+
+        )
+    }
+
+    # Swap dates if reversed
+    if start > end:
+        start, end = end, start
+
+    # Fetch historical candles
+    url = f"https://api.upstox.com/v2/historical-candle/NSE_EQ|INE267A01025/1minute/2025-12-06/2025-11-07"
+    r = requests.get(url, headers=headers)
+    candles = r.json()["data"]["candles"]
+
+    # Upstox gives 7 columns including OI
+    df = pd.DataFrame(
+        candles,
+        columns=["timestamp", "open", "high", "low", "close", "volume", "oi"]
+    )
+
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df["returns"] = df["close"].pct_change().dropna()
+
+    # Calculate drift & volatility
+    mu = df["returns"].mean()
+    sigma = df["returns"].std()
+
+    initial_price = df["close"].iloc[-1]
+    sim_paths = np.zeros((horizon, sims))
+
+    # Run Monte Carlo Shock Simulation
+    for s in range(sims):
+        price = initial_price
+        for t in range(horizon):
+            shock = np.random.normal(mu, sigma)
+            price *= (1 + shock)
+            sim_paths[t, s] = price
+
+    return pd.DataFrame(sim_paths)
+mc = monte_carlo_from_upstox(
+    symbol="NSE_EQ|INE267A01025",
+    interval="1minute",
+    start="2025-11-07",
+    end="2025-12-06",
+    sims=1000,
+    horizon=252
+)
+mc.head()
